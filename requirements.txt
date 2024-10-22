@@ -1,0 +1,9 @@
+pandas
+yahoo_fin
+matplotlib
+beautifulsoup4
+setuptools
+mplfinance
+nsepython
+scikit-learn
+openpyxl
