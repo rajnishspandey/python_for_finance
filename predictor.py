@@ -12,8 +12,10 @@ def process_stock(symbol):
     """Process stock data, generate features, train model, and make predictions."""
     try:
         end_date = datetime.now()
-        start_date = end_date - timedelta(days=365)  # Fetch data for the past year
+        start_date = end_date - timedelta(days=180)
         data = fetch_stock_data(symbol, start_date, end_date)
+        data.set_index('date', inplace=True)
+        data = data.sort_index(ascending=False)
         
         if data.empty:
             logging.warning(f"No data fetched for {symbol}.")
@@ -33,27 +35,49 @@ def process_stock(symbol):
         model, X_test, y_test = train_model(features, labels)
         accuracy = accuracy_score(y_test, model.predict(X_test))
         
-        # Get the most recent data point
-        latest_data = features.iloc[-1:].copy()
+        # Check if data is already sorted
+        if data.index[0] < data.index[-1]:
+            data.sort_index(ascending=False, inplace=True)
+
+        latest_data = features.iloc[-1:].copy()  # Always takes the last row for prediction
+        logging.info(f"Latest Data for {symbol}: {latest_data}")
+
+        
+        # logging.info(f"Current Price: {current_price}, SMA20 Value: {sma20_value}")        
         
         # Make predictions for the next day
         prediction = model.predict(latest_data)[0]
         prediction_proba = model.predict_proba(latest_data)[0]
 
-        return {
-            'symbol': symbol,
-            'Accuracy': round(accuracy,2),
-            'Prediction': 'Buy' if prediction == 1 else 'Hold/Sell',
-            'Confidence': prediction_proba[1] if prediction == 1 else prediction_proba[0],
-            'Current_Price': data['close'].iloc[-1],
-            'Closing_date': data['date'].iloc[-1],
-            'SMA20': data['SMA20'].iloc[-1],
-            'Is_Above_SMA20': data['close'].iloc[-1] > data['SMA20'].iloc[-1]
-        }
+        # Define a threshold for "touching" the SMA20
+        threshold = 0.01  # 1% proximity to SMA20
+
+        # Check the conditions for storage
+        current_price = data['close'].iloc[-1]
+        sma20_value = data['SMA20'].iloc[-1]
+        closing_date = data.index[-1]  # Assuming the index is the date
+        
+        if (latest_data['SMA20_Uptrend'].iloc[0] == 1 and 
+            prediction == 1 and 
+            current_price > sma20_value and 
+            abs(current_price - sma20_value) / sma20_value <= threshold):
+
+            return {
+                'symbol': symbol,
+                'Accuracy': round(accuracy, 2),
+                'Prediction': 'Buy',
+                'Confidence': prediction_proba[1],
+                'Current_Price': current_price,
+                'SMA20': sma20_value,
+                'Is_Above_SMA20': current_price > sma20_value,
+                'Distance_to_SMA20': abs(current_price - sma20_value),  # Optionally include distance
+                'Closing_Date': closing_date.strftime('%Y-%m-%d')  # Format the date as a string
+            }
+        else:
+            return None  # Return None if conditions are not met
     except Exception as e:
         logging.error(f"Error processing {symbol}: {str(e)}")
         return None
-
 
 def predict_stocks(num_stocks=500, max_workers=None):
     """Predict stocks based on their historical data."""
@@ -73,7 +97,11 @@ def predict_stocks(num_stocks=500, max_workers=None):
                 except Exception as exc:
                     logging.error(f"Stock {symbol} generated an exception: {exc}")
 
-        return pd.DataFrame(results)
+        # Convert results to DataFrame and filter based on conditions
+        filtered_results = [result for result in results if result is not None]
+        results_df = pd.DataFrame(filtered_results)
+
+        return results_df
 
     except FileNotFoundError:
         logging.error("The file 'nifty500_symbols.csv' was not found.")

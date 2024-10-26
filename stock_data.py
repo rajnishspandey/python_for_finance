@@ -24,7 +24,7 @@ def get_data_from_yahoo():
     symbols_df = pd.read_csv('nifty500_symbols.csv')
     os.makedirs('stocks_dfs', exist_ok=True)
     end_date = datetime.now()
-    start_date = end_date - timedelta(days=5*365)
+    start_date = end_date - timedelta(days=180)
 
     for symbol in symbols_df['symbol']:
         try:
@@ -43,9 +43,6 @@ def get_data_from_yahoo():
 
         except Exception as e:
             print(f"Error fetching data for {symbol}: {str(e)}")
-
-# get_data_from_yahoo()
-
 
 def fetch_stock_data(symbol, start_date, end_date):
     """Load stock data from a local CSV file and filter by date."""
